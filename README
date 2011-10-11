@@ -3,4 +3,151 @@ Fractional Delay revisited
 
 This is code for an approach to the fractional delay problem.
 
-There are filters H_d(X) 
+There are filters H_d(X) such that
+
+Product(H_d(X)) = z^-1
+d \in D
+
+iff Sum(d)=1
+
+These filters are acausal and of infinite support. In fact, they are 
+the "Sampled Sinc":
+
+H_d(X) = Sum z^k*sinc(k+d)
+       k=-inf..+inf
+
+To implement a fractional delay in real time, a causal method is required.
+
+Thiran presented a solution, which involves IIR filters of
+Order k for a delay of k-0.5 ... k+>0.5. Thiran filters present phase
+problems in high frequencies, but in practice they prove their rigid
+design principles.
+
+Another solution, which i will present here, is the Application of
+Pade Approximants.
+
+Pade Approximants are rational functions which identify a rational
+impulse response with a polynomial:
+
+H(x)
+----  = P(x)
+G(x)
+
+An Algorithm to Solve this Problem is included (pade.m)
+
+Possibly to the readers surprise, it turns out that Pade Approximants
+can surpass the Polynomial P in some regards,
+eg., it may turn out that H(x) and G(x) are both finite despite P(x)
+being infinite.
+
+As the notation suggests, this makes "Pade Approximants" a method of
+Filter Design.
+
+As an example, we will calculate the Pade Approximants for a few
+sampled sincs (as in the formula above):
+
+octave> U=[];V=[];for d=-1:0.1:0;X=sinc((-3:20)+d);[A,B]=pade(X,6,6);U=[U A];V=[V B];endfor
+warning: matrix singular to machine precision, rcond = 3.89804e-17
+warning: attempting to find minimum norm solution
+warning: dgelsd: rank deficient 6x6 matrix, rank = 5
+warning: matrix singular to machine precision, rcond = 0
+warning: attempting to find minimum norm solution
+warning: dgelsd: rank deficient 6x6 matrix, rank = 4
+octave> plot(U')
+octave> plot(V')
+
+This doesn't look too bad - except for the singular matrices at the
+integer delays.
+
+Now a closer look:
+
+k=25;plot(L=filter(U(:,k),[1;V(:,2)],[1 zeros(1,200)]))
+
+U and [1;V] shall be named "P" for convenience
+
+reveals two things:
+
+1. This looks remarkably like a sampled sinc
+2. This looks more than a sinc than a comparable thiran delay
+
+Even closer inspection (cf. compare-7-5-0.27.eps) will reveal:
+
+1. Although the high frequencies seem to be reproduced truly, they are
+not. There is a lot of phase error near the nyquist frequency.
+
+2. Phase is reproduced very faithfully in the lower half of the
+spectrum.
+
+3. Thiran filters
+  - reproduce better than P in the higher half of the spectrum
+  (although there's considerable oscillation)
+  - have more phase error than P in the lower half of the spectrum
+  (there's still some oscillation)
+
+4. Near the nyquist frequency, both filter types lack due to phase
+restrictions.
+
+Wavelet transforms have their own way of working near the nyquist
+frequency. Wavelet transforms work like:
+
+       |--- G --- d2 ---> A
+S > ---|
+       |--- H --- d2 ---> B
+
+
+with a Low-Pass filter "G", a High-Pass filter "H" and "decimation"
+(for sake of simplicity, but without complete loss of generality let
+us assume that decimation is about 2).
+
+An important point of a wavelet transform is that it offers "perfect
+reconstruction", despite the heavy (and maybe unintuitive)
+processing. A signal processed like that with certain wavelets can be
+reconstructed fully by:
+
+A   >--- u2 --- G~ --|
+                     |----> S
+B   >--- u2 --- H~ --|
+
+With matching Filters G~ and H~.
+
+Since the High-Pass path will contain most of the phase information we
+want to describe, we will consider this path first.
+
+Decimation by 2 introduces aliasing: Every Frequency f will be
+mirrored at f_a-f. Since in the High-Pass path there's only high
+frequencies, this is similar to reflecting down only the upper
+half of the spectrum beyond (f_a/2). After decimation, the lower half of
+the spectrum is populated with "Wavelet Coefficients" and the upper
+half is nearly empty. Quite good for processing, as QMF people may
+know.
+
+As an example, the following filters are known as the "Haar Wavelet"
+
+G=sqrt(2)*[ 1 1]
+H=sqrt(2)*[-1 1]
+
+(Why this is called a "Wavelet" is beyond the scope of the document)
+
+The High Pass path (Signal B) of the Haar Wavelet Transform of a
+sampled sinc is thus:
+
+-sinc(k*2+d-1)+sinc(k*2+d)
+
+a plot:
+
+octave> k=-20:20;d=0.3;U=-sinc(k*2+d-1)+sinc(k*2+d);plot(U)
+
+shows that this is a rather well-defined signal with well-localized
+high-frequency content, but also with 1/x characteristic in the
+distance.
+
+If we now build a Pade Approximant to this term, we will see that this
+is a well-defined signal indeed:
+
+octave:362> waveletphase(0.2)
+
+As it might have been expected, the filter isn't very true in the lowest
+frequencies. As these correspond to highest frequencies in the original
+signal and the highest frequencies ought to have a finite phase shift
+which is not a multiple of pi (except for some special cases)
+
